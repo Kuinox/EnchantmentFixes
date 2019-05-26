@@ -2,7 +2,6 @@ package com.kuinox.enchantmentfixes;
 
 import org.bukkit.Material;
 import org.bukkit.Statistic;
-import org.bukkit.advancement.Advancement;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -538,19 +537,19 @@ public class EnchantmentListener implements Listener {
             _m.warning("I didn't found any offer when the game could.");
             return null;
         }
-        Enchantment weighetedSelected = getEnchantmentRandomlyOnWeight(playerRandom, possiblesOffers);
-        if(weighetedSelected == null) return null;
-        CustomOffer offer =  new CustomOffer(possiblesOffers.get(weighetedSelected),weighetedSelected, possiblesOffers);
-        possiblesOffers.remove(weighetedSelected);
+        Enchantment weightedSelected = getEnchantmentRandomlyOnWeight(playerRandom, possiblesOffers);
+        if(weightedSelected == null) return null;
+        CustomOffer offer =  new CustomOffer(possiblesOffers.get(weightedSelected),weightedSelected, possiblesOffers);
+        possiblesOffers.remove(weightedSelected);
         return offer;
     }
 
     private Enchantment getEnchantmentRandomlyOnWeight(Random playerRandom, HashMap<Enchantment, Integer> possiblesOffers) {
-        int w = playerRandom.nextInt(getTotalWeight(possiblesOffers.keySet())/ 2);
-        for(Enchantment currEnch : possiblesOffers.keySet()) {
-            w-= _weight_map.get(currEnch);
+        int w = playerRandom.nextInt(getTotalWeight(possiblesOffers.keySet()));
+        for(Enchantment curr : possiblesOffers.keySet() ) {
+            w-= _weight_map.get(curr);
             if(w<0) {
-                return currEnch;
+                return curr;
             }
         }
         _m.warning("Algorithm error !");
@@ -599,6 +598,8 @@ public class EnchantmentListener implements Listener {
         }
         return output;
     }
+
+
 
     private int getEnchantLevelForItem(Enchantment enchantment, int enchantability) {
         MinMaxEnchantability minMax = _minmax_map.get(enchantment);
