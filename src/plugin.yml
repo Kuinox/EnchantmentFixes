@@ -1,0 +1,5 @@
+name: EnchantmentFixes
+version: 0.0.0
+author: Kuinox
+main: com.kuinox.enchantmentfixes.Main
+api-version: 1.14
