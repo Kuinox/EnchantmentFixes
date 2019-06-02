@@ -2,6 +2,7 @@ package com.kuinox.enchantmentfixes;
 
 import org.bukkit.Material;
 import org.bukkit.Statistic;
+import org.bukkit.World;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -9,6 +10,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.enchantment.EnchantItemEvent;
 import org.bukkit.event.enchantment.PrepareItemEnchantEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 
 import java.util.*;
 import java.util.logging.Logger;
@@ -494,17 +496,29 @@ public class EnchantmentListener implements Listener {
 
     private Map<Player, Long> _seeds;
     private Logger _m;
+    private Plugin _plugin;
 
-    EnchantmentListener(Logger logger) {
+    EnchantmentListener(Plugin plugin) {
         _seeds = new HashMap<>();
-        _m = logger;
+        _m = plugin.getLogger();
+        _plugin = plugin;
     }
 
-    private Random getPlayerRandom(Player player, int button) {
+    private Random getPlayerRandom(Plugin plugin, Player player, int button) {
         if (!_seeds.containsKey(player)) {
             _seeds.put(player, (new Random()).nextLong());//time based seed, i guess it shouldn't be bad.
         }
-        return new Random(player.getUniqueId().getLeastSignificantBits() + player.getStatistic(Statistic.ITEM_ENCHANTED) + button * 137);//should be reboot proof
+        List<World> worlds = plugin.getServer().getWorlds();
+        long seed = 0;
+        if (worlds.size() != 0) {
+            seed = worlds.get(0).getSeed();
+        }
+        Random rand = new Random((player.getUniqueId().getLeastSignificantBits() | seed) + player.getStatistic(Statistic.ITEM_ENCHANTED));
+        long newSeed = rand.nextLong();//one seed for each button.
+        for (int i = 0; i < button; i++) {
+            newSeed = rand.nextLong();
+        }
+        return new Random(newSeed);//should be reboot proof
     }
 
     @EventHandler
@@ -519,36 +533,36 @@ public class EnchantmentListener implements Listener {
 
         for (int i = 0; i < e.getOffers().length; i++) {
             if (e.getOffers()[i] == null) continue;
-            Random playerRandom = getPlayerRandom(e.getEnchanter(), i);
+            Random playerRandom = getPlayerRandom(_plugin, e.getEnchanter(), i);
             int modifiedEnchantLevel = getModifiedEnchantLevel(playerRandom, e.getItem().getType(), e.getOffers()[i].getCost());
             CustomOffer ourOffer = getCustomNewCustomOffer(playerRandom, e.getItem(), modifiedEnchantLevel);
-            if(ourOffer == null) return;
+            if (ourOffer == null) return;
             e.getOffers()[i].setEnchantment(ourOffer.enchantment);
             e.getOffers()[i].setEnchantmentLevel(ourOffer.level);
         }
     }
 
     private CustomOffer getCustomNewCustomOffer(Random playerRandom, ItemStack item, int modifiedEnchantLevel) {
-        List<Enchantment> allEnchantsThatCanBeApplied = getEnchantsThatCanBeApplied( item );
+        List<Enchantment> allEnchantsThatCanBeApplied = getEnchantsThatCanBeApplied(item);
 
 
-        LinkedHashMap <Enchantment, Integer> possiblesOffers = getEnchantsForThisEnchantability(allEnchantsThatCanBeApplied, modifiedEnchantLevel);
-        if(possiblesOffers.size() == 0) {
+        LinkedHashMap<Enchantment, Integer> possiblesOffers = getEnchantsForThisEnchantability(allEnchantsThatCanBeApplied, modifiedEnchantLevel);
+        if (possiblesOffers.size() == 0) {
             _m.warning("I didn't found any offer when the game could.");
             return null;
         }
         Enchantment weightedSelected = getEnchantmentRandomlyOnWeight(playerRandom, possiblesOffers);
-        if(weightedSelected == null) return null;
-        CustomOffer offer =  new CustomOffer(possiblesOffers.get(weightedSelected),weightedSelected, possiblesOffers);
+        if (weightedSelected == null) return null;
+        CustomOffer offer = new CustomOffer(possiblesOffers.get(weightedSelected), weightedSelected, possiblesOffers);
         possiblesOffers.remove(weightedSelected);
         return offer;
     }
 
     private Enchantment getEnchantmentRandomlyOnWeight(Random playerRandom, HashMap<Enchantment, Integer> possiblesOffers) {
         int w = playerRandom.nextInt(getTotalWeight(possiblesOffers.keySet()));
-        for(Enchantment curr : possiblesOffers.keySet() ) {
-            w-= _weight_map.get(curr);
-            if(w<0) {
+        for (Enchantment curr : possiblesOffers.keySet()) {
+            w -= _weight_map.get(curr);
+            if (w < 0) {
                 return curr;
             }
         }
@@ -560,7 +574,8 @@ public class EnchantmentListener implements Listener {
         int level;
         Enchantment enchantment;
         HashMap<Enchantment, Integer> possibleEnchantments;
-        CustomOffer(int level, Enchantment enchantment,HashMap<Enchantment, Integer> possibleEnchantments) {
+
+        CustomOffer(int level, Enchantment enchantment, HashMap<Enchantment, Integer> possibleEnchantments) {
             this.level = level;
             this.enchantment = enchantment;
             this.possibleEnchantments = possibleEnchantments;
@@ -576,8 +591,8 @@ public class EnchantmentListener implements Listener {
         return sum;
     }
 
-    private LinkedHashMap <Enchantment, Integer> getEnchantsForThisEnchantability(List<Enchantment> allEnchantsThatCanBeApplied, int enchantability) {
-        LinkedHashMap <Enchantment, Integer> output = new LinkedHashMap <>();
+    private LinkedHashMap<Enchantment, Integer> getEnchantsForThisEnchantability(List<Enchantment> allEnchantsThatCanBeApplied, int enchantability) {
+        LinkedHashMap<Enchantment, Integer> output = new LinkedHashMap<>();
         for (Enchantment curr : allEnchantsThatCanBeApplied) {
             int level = getEnchantLevelForItem(curr, enchantability);
             if (level == 0) continue;
@@ -586,19 +601,17 @@ public class EnchantmentListener implements Listener {
         return output;
     }
 
-    private List<Enchantment> getEnchantsThatCanBeApplied( ItemStack item ) {
+    private List<Enchantment> getEnchantsThatCanBeApplied(ItemStack item) {
         List<Enchantment> output = new LinkedList<>();
         for (int i = 0; i < Enchantment.values().length; i++) {
             Enchantment curr = Enchantment.values()[i];
             if ((curr.canEnchantItem(item) || item.getType() == Material.BOOK)
-                    && !curr.isTreasure())
-                     {
+                    && !curr.isTreasure()) {
                 output.add(curr);
             }
         }
         return output;
     }
-
 
 
     private int getEnchantLevelForItem(Enchantment enchantment, int enchantability) {
@@ -638,27 +651,28 @@ public class EnchantmentListener implements Listener {
             _m.severe("Probably a bug: Player did an enchantment without triggering onEnchantProposal.");
             return;
         }
-        Random playerRandom =  getPlayerRandom(e.getEnchanter(), e.whichButton());
+        Random playerRandom = getPlayerRandom(_plugin, e.getEnchanter(), e.whichButton());
         int modifiedEnchLevel = getModifiedEnchantLevel(playerRandom, e.getItem().getType(), e.getExpLevelCost());
-        CustomOffer offer = getCustomNewCustomOffer(playerRandom, e.getItem(), modifiedEnchLevel );
-        if(offer == null) return;
+        CustomOffer offer = getCustomNewCustomOffer(playerRandom, e.getItem(), modifiedEnchLevel);
+        if (offer == null) return;
         e.getEnchantsToAdd().clear();
         e.getEnchantsToAdd().put(offer.enchantment, offer.level);
-        while(playerRandom.nextInt(50) <= modifiedEnchLevel) {
+        int rand = playerRandom.nextInt(50);
+        while (rand <= modifiedEnchLevel) {
             offer.possibleEnchantments.keySet().removeIf(enchantment -> {
-                for(Enchantment curr : e.getEnchantsToAdd().keySet()) {
-                    if(enchantment.conflictsWith(curr)) {
+                for (Enchantment curr : e.getEnchantsToAdd().keySet()) {
+                    if (enchantment.conflictsWith(curr)) {
                         return true;
                     }
                 }
                 return false;
             });
-
-            if(offer.possibleEnchantments.isEmpty()) break;
+            if (offer.possibleEnchantments.isEmpty()) break;
             Enchantment additionalEnchant = getEnchantmentRandomlyOnWeight(playerRandom, offer.possibleEnchantments);
             e.getEnchantsToAdd().put(additionalEnchant, offer.possibleEnchantments.get(additionalEnchant));
             offer.possibleEnchantments.remove(additionalEnchant);
-            modifiedEnchLevel = modifiedEnchLevel/2;
+            modifiedEnchLevel = modifiedEnchLevel / 2;
+            rand = playerRandom.nextInt(50);
         }
         _seeds.remove(currentPlayer);
     }
